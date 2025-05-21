@@ -24,6 +24,16 @@ pub trait Player {
     fn attack(&self, heal_amount: i32);
     fn dodge(&self, dodge_amount: i32);
     fn stats(&self) -> String;
+    
+}
+
+impl Character {
+        pub fn stats(&self) -> String {
+        format!(
+            "{} hp: {} attack: {} dodge: {} luck: {} xp: {}",
+            self.class, self.health, self.attack, self.dodge, self.luck, self.xp
+        )
+    }
 }
 
 impl Player for Character {
@@ -74,11 +84,11 @@ impl Player for Character {
     fn dodge(&self, dodge_amount: i32) {
         self.xp + self.dodge + self.luck / 2;
     }
-
     fn stats(&self) -> String {
         format!(
             "{} hp: {} attack: {} dodge: {} luck: {} xp: {}",
             self.class, self.health, self.attack, self.dodge, self.luck, self.xp
         )
     }
+
 }
