@@ -2,12 +2,13 @@
 use crate::{world::{World}, character::Character};
 use crate::location::{Location, LocationState,  Species};
 use std::fmt;
-
+use crate::location_generator::{LocationGenerator, LocationMap};
 
 #[derive(PartialEq)]
 pub enum GamePhase {
     Menu,
     PlayingWorld,
+    PlayingLocation(LocationMap),
     GameOver,
 }
 
@@ -34,6 +35,22 @@ impl fmt::Display for LocationState {
     }
 }
 impl Game{
+    pub fn enter_location(&mut self) {
+    let current_tile = self.world.get_tile(self.player_pos.0, self.player_pos.1);
+    if let Some(location) = &current_tile.location {
+        let mut generator = LocationGenerator::new(
+            self.world.seed,
+            current_tile.terrain,
+            location.clone()
+        );
+        
+        let location_map = generator.generate();
+        // Find valid spawn position
+        self.player_pos = location_map.find_spawn_position();
+        self.phase = GamePhase::PlayingLocation(location_map);
+    }
+}
+
     pub fn update_interaction_prompt(&mut self) {
         let current_tile = self.world.get_tile(self.player_pos.0, self.player_pos.1);
         if let Some(prompt) = self.world.get_interaction_prompt(current_tile) {

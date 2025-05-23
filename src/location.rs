@@ -55,6 +55,7 @@ pub enum Industry {
     Fishing,
     Trading,
     Crafting,
+    Foraging,
     Hunting,
     Research,
     
@@ -81,6 +82,7 @@ impl Industry {
             Industry::Fishing => "fishing boats dot the nearby waters",
             Industry::Trading => "merchants haggle in busy marketplaces",
             Industry::Crafting => "skilled artisans work in numerous workshops",
+            Industry::Foraging => "foragers gather rare herbs and plants",
             Industry::Hunting => "hunters prepare for their next expedition",
             Industry::Research => "scholars debate in marble halls",
         }

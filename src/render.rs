@@ -6,11 +6,11 @@ use ratatui::{
     layout::{Rect, Layout, Constraint, Direction},
     style::{Style, Stylize, Color},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Terminal,
     Frame,
 };
-use crate::game::Game;
+use crate::game::{Game, GamePhase};
 use std::io;
 use crossterm::{
     execute,
@@ -25,11 +25,34 @@ pub fn render_game(
 ) -> Result<(), Box<dyn std::error::Error>> {
     terminal.draw(|f| {
         let chunks = create_layout(f.size());
-        render_map_widget(f, &game, chunks[0]);      // Map
-        render_stats_widget(f, &game, chunks[1]);    // Stats
-        render_message_widget(f, &game, chunks[2]);   // Message
-        render_action_widget(f, &game, chunks[3]);    // Actions
+        
+        // Render different map based on game phase
+        match &game.phase {
+            GamePhase::PlayingWorld => {
+                render_map_widget(f, game, chunks[0]);
+            }
+            GamePhase::PlayingLocation(location_map) => {
+                let location_view = render_location_map(
+                    location_map,
+                    game.player_pos,
+                    "Location"
+                );
+                f.render_widget(location_view, chunks[0]);
+            }
+            GamePhase::Menu => {
+                // TODO: Render menu if needed
+            }
+            GamePhase::GameOver => {
+                // TODO: Render game over screen if needed
+            }
+        }
+
+        // Render common UI elements
+        render_stats_widget(f, game, chunks[1]);     // Stats
+        render_message_widget(f, game, chunks[2]);    // Message
+        render_action_widget(f, game, chunks[3]);     // Actions
     })?;
+    
     Ok(())
 }
 
@@ -40,7 +63,7 @@ fn create_layout(size: Rect) -> Vec<Rect> {
         .margin(1)
         .constraints([
             Constraint::Percentage(70),    // Top section (map + stats)
-            Constraint::Length(3),         // Message box
+            Constraint::Length(5),         // Message box
             Constraint::Min(0),            // Action box
         ].as_ref())
         .split(size);
@@ -49,8 +72,8 @@ fn create_layout(size: Rect) -> Vec<Rect> {
     let top_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(80),    // Map area
-            Constraint::Percentage(20),    // Stats panel
+            Constraint::Percentage(70),    // Map area
+            Constraint::Percentage(30),    // Stats panel
         ].as_ref())
         .split(vertical_chunks[0]);
 
@@ -81,7 +104,9 @@ fn render_message_widget(
         let message_widget = Paragraph::new(message.as_str())
             .block(Block::default()
                 .borders(Borders::ALL)
-                .title("Message"));
+                .title("Message"))
+                .wrap(Wrap { trim: true });
+
         f.render_widget(message_widget, area);
     }
 }
@@ -105,26 +130,12 @@ fn get_tile_actions(tile: &Tile) -> Option<String> {
     let base_actions = "[C] Camp | [I] Inventory | [Q] Quit";
     
     let tile_action = if let Some(location) = &tile.location {
-        match location.state {
-            LocationState::Thriving | LocationState::Struggling => 
-                Some("| [E] Enter Settlement"),
-            LocationState::Abandoned | LocationState::Ruins => 
-                Some("| [S] Search Area"),
-            LocationState::Sacred => 
-                Some("| [P] Pray"),
-            LocationState::Cursed => 
-                Some("| [C] Cleanse"),
-            LocationState::Hidden => 
-                Some("| [I] Investigate"),
-        }
+        format!("| [E] Enter {} Settlement", location.species)
     } else {
-        None
+        String::new()
     };
 
-    Some(match tile_action {
-        Some(action) => format!("{} {}", base_actions, action),
-        None => base_actions.to_string(),
-    })
+    Some(format!("{} {}", tile_action, base_actions))
 }
 
 // Add a new function to render the stats widget
@@ -135,6 +146,7 @@ fn render_stats_widget(
 ) {
     let stats = vec![
         format!("Name: {}", game.player.name),
+        format!("Species: {}", game.player.species),
         format!("Class: {}", game.player.class),
         format!("HP: {}/{}", game.player.health, game.player.max_health),
         format!("Str: {}", game.player.attack),
@@ -156,6 +168,9 @@ fn render_stats_widget(
 }
 
 const FOG_RADIUS: i32 = 4;
+const RENDER_RADIUS: i32 = 10;  // Add this constant
+
+// render world map
 pub fn render_tile_map(
     world: &World,
     player_pos: (usize, usize),
@@ -165,14 +180,15 @@ pub fn render_tile_map(
     let mut lines = Vec::new();
     let (px, py) = (player_pos.0 as i32, player_pos.1 as i32);
 
-    for dy in -view_radius..=view_radius {
+    for dy in -RENDER_RADIUS..=RENDER_RADIUS {
         let mut row = Vec::new();
-        for dx in -view_radius..=view_radius {
+        for dx in -RENDER_RADIUS..=RENDER_RADIUS {
             let (wx, wy) = world.get_wrapped_coordinates(px + dx, py + dy);
             let tile = world.get_tile(wx, wy);
-            let (symbol) = tile.appearance();
+            let symbol = tile.appearance(); // Remove the tuple destructuring parentheses
             let dist = dx*dx + dy*dy;
 
+            
             let span = if !tile.seen {
                 // Unseen tiles - black (hidden)
                 Span::styled("  ", Style::default().bg(Color::Black))
@@ -189,7 +205,7 @@ pub fn render_tile_map(
                 // Out of view range but seen - dimmed
                 Span::styled(
                     format!("{} ", symbol),
-                    get_terrain_style(tile).dim()
+                    get_terrain_style(tile).fg(Color::DarkGray)
                 )
             };
             row.push(span);
@@ -225,14 +241,106 @@ fn get_terrain_style(tile: &Tile) -> Style {
     let color = match tile.terrain {
         TerrainType::Water => Color::Blue,
         TerrainType::Desert => Color::Yellow,
-        TerrainType::Plains => Color::Green,
+        TerrainType::Plains => Color::LightGreen,
         TerrainType::Forest => Color::Green,
-        TerrainType::Hills => Color::Gray,
-        TerrainType::Mountains => Color::White,
+        //TerrainType::Hills => Color::Gray,
+        TerrainType::Mountains => Color::Gray,
+        TerrainType::Snow => Color::White,
+        TerrainType::Jungle => Color::Green,
+        TerrainType::Swamp => Color::Green,
     };
     Style::default().fg(color)
 }
 
+// render local map
+use crate::location_generator::{LocationMap, LocationTileType, FeatureType};
+
+// ...existing code...
+
+fn render_location_map(
+    map: &LocationMap,
+    player_pos: (usize, usize),
+    title: &str,
+) -> Paragraph<'static> {
+    let mut lines = Vec::new();
+    let (px, py) = (player_pos.0 as i32, player_pos.1 as i32);
+
+    for dy in -RENDER_RADIUS..=RENDER_RADIUS {
+        let mut row = Vec::new();
+        for dx in -RENDER_RADIUS..=RENDER_RADIUS {
+            let dist = dx*dx + dy*dy;
+            let world_x = px + dx;
+            let world_y = py + dy;
+            
+            let span = if dist > RENDER_RADIUS * RENDER_RADIUS {
+                // Out of view range
+                Span::styled("  ", Style::default().fg(Color::DarkGray))
+            } else if world_x < 0 || world_y < 0 || 
+                      world_x >= map.width as i32 || 
+                      world_y >= map.height as i32 {
+                // Out of bounds - show empty space
+                Span::styled("  ", Style::default().fg(Color::DarkGray))
+            } else if (world_x as usize, world_y as usize) == player_pos {
+                // Player position
+                Span::styled("@ ", Style::default().bold())
+            } else {
+                let tile = &map.tiles[world_y as usize][world_x as usize];
+                if let Some(feature) = &tile.feature {
+                    // Features
+                    let symbol = match feature.feature_type {
+                        FeatureType::Market => "M ",
+                        FeatureType::Temple => "T ",
+                        FeatureType::Tavern => "A ",
+                        FeatureType::Blacksmith => "B ",
+                        FeatureType::Garden => "* ",
+                        FeatureType::TrainingGround => "X ",
+                        FeatureType::Storage => "S ",
+                    };
+                    Span::styled(symbol, Style::default().fg(Color::Yellow))
+                } else {
+                    // Regular tiles
+                    let (symbol, style) = match tile.tile_type {
+                        LocationTileType::Ground => (". ", Style::default().fg(Color::DarkGray)),
+                        LocationTileType::Wall => ("# ", Style::default().fg(Color::White)),
+                        LocationTileType::Water => ("~ ", Style::default().fg(Color::Blue)),
+                        LocationTileType::HumanRoad => ("= ", Style::default().fg(Color::Gray)),
+                        LocationTileType::ElfPath => ("- ", Style::default().fg(Color::Green)),
+                        LocationTileType::OrcTrail => (": ", Style::default().fg(Color::Red)),
+                        LocationTileType::HumanHouse => ("H ", Style::default().fg(Color::White)),
+                        LocationTileType::ElfTreehouse => ("T ", Style::default().fg(Color::Green)),
+                        LocationTileType::OrcHut => ("O ", Style::default().fg(Color::Red)),
+                        LocationTileType::Trading => ("$ ", Style::default().fg(Color::Yellow)),
+                        LocationTileType::Shrine => ("^ ", Style::default().fg(Color::Magenta)),
+                    };
+                    Span::styled(symbol, style)
+                }
+            };
+            row.push(span);
+        }
+        lines.push(Line::from(row));
+    }
+    let location_title = format!("{} ({}, {}) - Points of Interest:", title, player_pos.0, player_pos.1);
+    let mut text = Text::from(lines);
+    
+    // Add nearby points of interest only
+    let mut poi_lines = Vec::new();
+    for poi in &map.points_of_interest {
+        let dx = poi.position.0 as i32 - px;
+        let dy = poi.position.1 as i32 - py;
+        if dx*dx + dy*dy <= RENDER_RADIUS*RENDER_RADIUS {
+            poi_lines.push(Line::from(format!(
+                "{} at ({}, {})",
+                poi.feature.name,
+                poi.position.0,
+                poi.position.1
+            )));
+        }
+    }
+    text.extend(poi_lines);
+
+    Paragraph::new(text)
+        .block(Block::default().borders(Borders::ALL).title(location_title))
+}
 
 // Define a type alias for our terminal type
 pub type GameTerminal = Terminal<CrosstermBackend<std::io::Stdout>>;
