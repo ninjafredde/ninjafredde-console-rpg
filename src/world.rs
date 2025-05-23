@@ -1,15 +1,7 @@
-
-use ratatui::{
-    layout::{Layout, Constraint, Direction},
-    widgets::{Paragraph, Block, Borders},
-    style::{Style, Color, Stylize},
-    text::{Text, Line, Span},
-};
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use noise::{NoiseFn, Perlin};
-
-
+use crate::location::{Location, Species, Governance, LocationState, Industry};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 
@@ -30,43 +22,44 @@ pub enum FeatureType {
     Shrine,
     Ruins,
 }
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone)]
 pub struct Tile {
     pub height: f32,
     pub terrain: TerrainType,
-    pub feature: FeatureType,
+    pub location: Option<Location>,  // Replace feature with location
     pub blocked: bool,
     pub seen: bool,
-
-    
 }
 
 impl Tile {
-    pub fn appearance(&self) -> (char, Color) {
-        if self.feature != FeatureType::None {
-            return match self.feature {
-                FeatureType::Town => ('T', Color::Yellow),
-                FeatureType::Mine => ('M', Color::Gray),
-                FeatureType::Dungeon => ('D', Color::Magenta),
-                FeatureType::Shrine => ('S', Color::Cyan),
-                FeatureType::Ruins => ('R', Color::DarkGray),
-                _ => ('?', Color::White),
+    pub fn appearance(&self) -> char {
+        if let Some(location) = &self.location {
+            return match location.species {
+                Species::Human => 'H',
+                Species::Orc => 'O',
+                Species::Elf => 'E',
+                Species::Cat => 'C',
+                Species::Rat => 'R',
+                Species::Bee => 'B',
+                Species::Bear => 'Ʊ',
+                Species::Ghost => 'G',
             };
         }
 
         match self.terrain {
-            TerrainType::Water => ('~', Color::Blue),
-            TerrainType::Desert => ('.', Color::Yellow),
-            TerrainType::Plains => (',', Color::Green),
-            TerrainType::Forest => ('♣', Color::Green),
-            TerrainType::Hills => ('^', Color::DarkGray),
-            TerrainType::Mountains => ('▲', Color::Gray),
+            TerrainType::Water => '~',
+            TerrainType::Desert => '.',
+            TerrainType::Plains => ',',
+            TerrainType::Forest => '♣',
+            TerrainType::Hills => '^',
+            TerrainType::Mountains => '▲',
         }
     }
 }
 
-pub type TileGrid = Vec<Vec<Tile>>;
 
+pub type TileGrid = Vec<Vec<Tile>>;
+const FOG_RADIUS: i32 = 4;
 pub struct World {
     pub seed: u64,
     pub width: usize,
@@ -76,6 +69,7 @@ pub struct World {
 }
 
 impl World {
+    // Read-only methods (take &self)
     pub fn width(&self) -> usize {
         self.width
     }
@@ -84,37 +78,88 @@ impl World {
         self.height
     }
 
-    pub fn tile_symbol(&self, x: usize, y: usize) -> char {
-        match self.tiles[y][x].terrain {
-            TerrainType::Water => '~',
-            TerrainType::Desert => '.',
-            TerrainType::Plains => ',',
-            TerrainType::Forest => '♣',
-            TerrainType::Hills => '^',
-            TerrainType::Mountains => '▲',
+    pub fn get_tile(&self, x: usize, y: usize) -> &Tile {
+        &self.tiles[y][x]
+    }
+
+    pub fn get_wrapped_coordinates(&self, x: i32, y: i32) -> (usize, usize) {
+        if self.wraparound {
+            let wx = x.rem_euclid(self.width() as i32) as usize;
+            let wy = y.rem_euclid(self.height() as i32) as usize;
+            (wx, wy)
+        } else {
+            (x.clamp(0, self.width() as i32 - 1) as usize,
+             y.clamp(0, self.height() as i32 - 1) as usize)
         }
     }
 
-    pub fn get_tile(&self, x: usize, y: usize) -> &Tile {
-    &self.tiles[y][x]
-}
+    // State-changing methods (take &mut self)
+    pub fn update(&mut self, player_pos: (usize, usize)) {
+        self.update_visibility(player_pos, FOG_RADIUS);
+        // Other world updates here...
+    }
 
+    fn update_visibility(&mut self, (px, py): (usize, usize), radius: i32) {
+    let (px, py) = (px as i32, py as i32);
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            // Only mark as seen if within circular radius, not square
+            let dist = dx*dx + dy*dy;
+            if dist <= radius*radius {
+                let (wx, wy) = self.get_wrapped_coordinates(px + dx, py + dy);
+                self.tiles[wy][wx].seen = true;
+            }
+        }
+    }
 }
-pub const MAP_WIDTH: usize = 128;
-pub const MAP_HEIGHT: usize = 128;
+pub fn find_nearest_species(
+        &self,
+        start: (usize, usize),
+        target_species: Species,
+    ) -> Option<(usize, usize)> {
+        let (sx, sy) = (start.0 as i32, start.1 as i32);
+        let mut closest: Option<((usize, usize), i32)> = None;
 
-pub fn get_interaction_prompt(tile: &Tile) -> Option<&'static str> {
-    match tile.feature {
-        FeatureType::Shrine => Some("(P) Pray"),
-        FeatureType::Town => Some("(E) Enter Town"),
-        FeatureType::Dungeon => Some("(D) Descend"),
-        FeatureType::Ruins => Some("(S) Search"),
-        FeatureType::Mine => Some("(M) Mine"),
-        FeatureType::None => None,
+        for (y, row) in self.tiles.iter().enumerate() {
+            for (x, tile) in row.iter().enumerate() {
+                if let Some(location) = &tile.location {
+                    if location.species == target_species {
+                        let dx = sx - x as i32;
+                        let dy = sy - y as i32;
+                        let dist = dx.abs() + dy.abs(); // Manhattan distance
+
+                        match closest {
+                            Some((_, best_dist)) if dist < best_dist => {
+                                closest = Some(((x, y), dist));
+                            }
+                            None => {
+                                closest = Some(((x, y), dist));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        closest.map(|(pos, _)| pos)
+    }
+    
+    pub fn get_interaction_prompt(&self, tile: &Tile) -> Option<String> {
+        tile.location.as_ref().map(|loc| loc.generate_description())
     }
 }
 
 
+
+pub const MAP_WIDTH: usize = 128;
+pub const MAP_HEIGHT: usize = 128;
+
+
+
+
+// Generates a world map using Perlin noise
+// This should be its own module
 pub fn generate_world_map(seed: u32) -> World {
     let perlin = Perlin::new(seed); // Deterministic noise
     let mut rng = StdRng::seed_from_u64(seed as u64);
@@ -125,7 +170,7 @@ pub fn generate_world_map(seed: u32) -> World {
       let mut tiles: TileGrid = vec![vec![Tile {
         height: 0.0,
         terrain: TerrainType::Plains,
-        feature: FeatureType::None,
+        location: None,
         blocked: false,
         seen: false,
     }; width]; height];
@@ -156,36 +201,19 @@ pub fn generate_world_map(seed: u32) -> World {
             };
 
             let blocked = matches!(terrain, TerrainType::Water | TerrainType::Mountains);
-
-            // randomly add features
-            let mut feature = FeatureType::None;
-
+            let mut location = None;
 
             if !blocked {
-                // 1% chance for a town, 2% for a mine in desert or hills, 3% for a dungeon
-                // 0.5% for shrine, 0.5% for ruins
-            let roll = rng.gen_range(0.0..1.0);
-                
-                feature = if roll < 0.01 {
-                    FeatureType::Town // 1%
-                } else if (terrain == TerrainType::Hills || terrain == TerrainType::Desert) && roll < 0.02 {
-                    FeatureType::Mine // 1% in desert, 2% in hills
-                } else if roll < 0.03 {
-                    FeatureType::Dungeon // 3%
-                } else if roll < 0.035 {
-                    FeatureType::Shrine
-                } else if roll < 0.04 {
-                    FeatureType::Ruins
-                } else {
-                    FeatureType::None
-                };
+                let roll = rng.gen_range(0.0..1.0);
+                if roll < 0.05 {  // 5% chance for a location
+                    location = Some(generate_location(&mut rng, terrain));
+                }
             }
-
 
             tiles[y][x] = Tile {
                 height: height_val,
                 terrain,
-                feature,
+                location,
                 blocked,
                 seen: false,
                 
@@ -202,87 +230,94 @@ pub fn generate_world_map(seed: u32) -> World {
     }
 }
 
+
+
 // Deterministic local seed function
 pub fn local_seed(global_seed: u64, world_x: usize, world_y: usize) -> u64 {
     global_seed ^ ((world_x as u64) << 32 | (world_y as u64))
 }
 
 
-//rendering
-pub fn render_tile_map(
-    map: &World,
-    player_pos: (usize, usize),
-    view_radius: i32,
-    title: &str,
-) -> Paragraph<'static> {
-    
-    let mut lines = Vec::new();
-    let (px, py) = (player_pos.0 as i32, player_pos.1 as i32);
-    
+fn generate_location(rng: &mut StdRng, terrain: TerrainType) -> Location {
+    let species = match terrain {
+        TerrainType::Mountains => vec![Species::Orc, Species::Bear],
+        TerrainType::Forest => vec![Species::Elf, Species::Bear, Species::Bee],
+        TerrainType::Plains => vec![Species::Human, Species::Cat],
+        TerrainType::Hills => vec![Species::Orc, Species::Human],
+        TerrainType::Desert => vec![Species::Rat, Species::Ghost],
+        TerrainType::Water => vec![Species::Ghost],
+    };
 
-    for dy in -view_radius..=view_radius {
-    let mut row = Vec::new();
-    for dx in -view_radius..=view_radius {
-        let x = px + dx;
-        let y = py + dy;
+    // Select industry based on terrain and some randomness
+    let primary_industries = match terrain {
+        TerrainType::Plains => vec![
+            (Industry::Farming, 0.6),
+            (Industry::Trading, 0.3),
+            (Industry::Crafting, 0.1),
+        ],
+        TerrainType::Forest => vec![
+            (Industry::Lumber, 0.5),
+            (Industry::Hunting, 0.3),
+            (Industry::Crafting, 0.2),
+        ],
+        TerrainType::Hills => vec![
+            (Industry::Mining, 0.6),
+            (Industry::Crafting, 0.3),
+            (Industry::Trading, 0.1),
+        ],
+        TerrainType::Desert => vec![
+            (Industry::Trading, 0.4),
+            (Industry::Mining, 0.3),
+            (Industry::Research, 0.3),
+        ],
+        _ => vec![(Industry::Trading, 1.0)],
+    };
 
-        let (wrapped_x, wrapped_y, in_bounds) = if map.wraparound {
-            let w = map.width() as i32;
-            let h = map.height() as i32;
-            let wx = (x.rem_euclid(w)) as usize;
-            let wy = (y.rem_euclid(h)) as usize;
-            (wx, wy, true)
-        } else if x < 0 || y < 0 || x >= map.width() as i32 || y >= map.height() as i32 {
-            (0, 0, false)
-        } else {
-            (x as usize, y as usize, true)
-        };
+   let industry = {
+    let roll = rng.gen_range(0.0..1.0);
+    let mut cumulative = 0.0;
+    let mut selected = Industry::Trading; // Default value
 
-        let tile = if in_bounds {
-            Some(&map.tiles[wrapped_y][wrapped_x])
-        } else {
-            None
-        };
-
-        let span = match tile {
-            Some(t) if dx == 0 && dy == 0 => {
-                Span::styled("@ ", Style::default().fg(Color::White).bold())
-            }
-            Some(t) => {
-                let (symbol, color) = t.appearance();
-                if dx.abs() <= view_radius && dy.abs() <= view_radius {
-                    // CURRENTLY visible
-                    Span::styled(format!("{} ", symbol), Style::default().fg(color))
-                } else if t.seen {
-                    // Seen before, but not visible now
-                    Span::styled(format!("{} ", symbol), Style::default().fg(color).dim())
-                } else {
-                    // Never seen
-                    Span::raw("  ")
-                }
-            }
-            None => Span::raw("  "),
-        };
-
-
-        row.push(span);
+    for (ind, chance) in primary_industries {
+        cumulative += chance;
+        if roll < cumulative {
+            selected = ind;
+            break; // Exit loop once we find our industry
+        }
     }
-    lines.push(Line::from(row));
+    selected
+};
+
+    Location {
+        name: "Unnamed".to_string(),
+        species: species[rng.gen_range(0..species.len())].clone(),
+        governance: match rng.gen_range(0..6) {
+            0 => Governance::Monarchy,
+            1 => Governance::Democracy,
+            2 => Governance::Theocracy,
+            3 => Governance::Anarchy,
+            4 => Governance::Hivemind,
+            _ => Governance::Council,
+        },
+        state: match rng.gen_range(0..7) {
+            0 => LocationState::Thriving,
+            1 => LocationState::Struggling,
+            2 => LocationState::Abandoned,
+            3 => LocationState::Ruins,
+            4 => LocationState::Cursed,
+            5 => LocationState::Sacred,
+            _ => LocationState::Hidden,
+        },
+        size: rng.gen_range(10..1000),
+        industry, // Add the industry field
+    }
 }
 
 
-    let text = Text::from(lines);
-    
-    let tile = &map.tiles[player_pos.1][player_pos.0];
-    let map_title = format!("World ({}, {}) - {:?}", player_pos.0, player_pos.1, tile.terrain);
 
-    //let map_title = format!("World ({}, {}) - {}", player_pos.0, player_pos.1, tile.terrain.tostring());
-
-    Paragraph::new(text).block(Block::default().borders(Borders::ALL).title(Span::from(map_title)))
-}
 fn layered_perlin(x: f64, y: f64, perlin: &Perlin, octaves: usize, persistence: f64, lacunarity: f64) -> f64 {
     let mut total = 0.0;
-    let mut frequency = 7.0;
+    let mut frequency = 5.0;
     let mut amplitude = 1.0;
     let mut max_value = 0.0;
 
