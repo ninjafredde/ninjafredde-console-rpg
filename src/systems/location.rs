@@ -1,6 +1,4 @@
-use rand::Rng;
 use std::fmt;
-
 #[derive(Debug,Copy, Clone, PartialEq)]
 pub enum Species {
     Human,
@@ -45,6 +43,19 @@ pub enum LocationState {
     Cursed,
     Sacred,
     Hidden,
+}
+impl LocationState{
+    pub fn to_string(&self) -> &str {
+        match self {
+            LocationState::Thriving => "thriving",
+            LocationState::Struggling => "struggling",
+            LocationState::Abandoned => "abandoned",
+            LocationState::Ruins => "ruined",
+            LocationState::Cursed => "cursed",
+            LocationState::Sacred => "sacred",
+            LocationState::Hidden => "hidden",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

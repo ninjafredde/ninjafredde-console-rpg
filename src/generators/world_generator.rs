@@ -1,8 +1,8 @@
 use noise::{NoiseFn, Perlin, Seedable};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
-use crate::world::{World, Tile, TileGrid, TerrainType};
-use crate::location::{Location, Species, Governance, LocationState, Industry};
+use crate::systems::world::{World, Tile, TileGrid, TerrainType};
+use crate::systems::location::{Location, Species, Governance, LocationState, Industry};
 
 pub struct WorldGenerator {
     height_noise: Perlin,

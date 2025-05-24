@@ -1,6 +1,7 @@
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use crate::world::TerrainType;
-use crate::location::{Location, Species};
+use crate::systems::world::TerrainType;
+use crate::systems::location::{Location, Species};
+use crate::systems::position::Position;
 use noise::NoiseFn;
 
 #[derive(PartialEq)]
@@ -12,7 +13,7 @@ pub struct LocationMap {
 }
 
 impl LocationMap {
-    pub fn find_spawn_position(&self) -> (usize, usize) {
+    pub fn find_spawn_position(&self) -> Position{
         let center_x = self.width / 2;
         let center_y = self.height / 2;
         
@@ -25,7 +26,7 @@ impl LocationMap {
                     
                     let tile = &self.tiles[y][x];
                     if self.is_walkable(x, y) {
-                        return (x, y);
+                        return Position{ x, y};
                     }
                 }
             }
@@ -35,13 +36,13 @@ impl LocationMap {
         for y in 0..self.height {
             for x in 0..self.width {
                 if self.is_walkable(x, y) {
-                    return (x, y);
+                        return Position{ x, y};
                 }
             }
         }
         
         // Ultimate fallback
-        (1, 1)
+        Position {x:1, y:1}
     }
 
     pub fn is_walkable(&self, x: usize, y: usize) -> bool {
@@ -101,7 +102,7 @@ pub enum FeatureType {
 }
 #[derive(Clone, PartialEq)]
 pub struct PointOfInterest {
-    pub position: (usize, usize),
+    pub position: Position,
     pub feature: Feature,
 }
 
@@ -227,45 +228,45 @@ impl LocationGenerator {
         }
     }
 
-        fn place_central_features(&mut self, map: &mut LocationMap) {
+    // Update methods that call place_feature
+    fn place_central_features(&mut self, map: &mut LocationMap) {
         let center_x = map.width / 2;
         let center_y = map.height / 2;
 
         // Place market in center
-        self.place_feature(map, (center_x, center_y), FeatureType::Market);
+        self.place_feature(map, Position { x: center_x, y: center_y }, FeatureType::Market);
 
         // Place temple nearby
-        let temple_pos = (
-            (center_x as i32 + self.rng.gen_range(-2..=2)).clamp(0, map.width as i32 - 1) as usize,
-            (center_y as i32 + self.rng.gen_range(-2..=2)).clamp(0, map.height as i32 - 1) as usize
-        );
-        self.place_feature(map, temple_pos, FeatureType::Temple);
+        let temple_x = (center_x as i32 + self.rng.gen_range(-2..=2))
+            .clamp(0, map.width as i32 - 1) as usize;
+        let temple_y = (center_y as i32 + self.rng.gen_range(-2..=2))
+            .clamp(0, map.height as i32 - 1) as usize;
+        self.place_feature(map, Position { x: temple_x, y: temple_y }, FeatureType::Temple);
 
         // Place tavern
-        let tavern_pos = (
-            (center_x as i32 + self.rng.gen_range(-3..=3)).clamp(0, map.width as i32 - 1) as usize,
-            (center_y as i32 + self.rng.gen_range(-3..=3)).clamp(0, map.height as i32 - 1) as usize
-        );
-        self.place_feature(map, tavern_pos, FeatureType::Tavern);
+        let tavern_x = (center_x as i32 + self.rng.gen_range(-3..=3))
+            .clamp(0, map.width as i32 - 1) as usize;
+        let tavern_y = (center_y as i32 + self.rng.gen_range(-3..=3))
+            .clamp(0, map.height as i32 - 1) as usize;
+        self.place_feature(map, Position { x: tavern_x, y: tavern_y }, FeatureType::Tavern);
     }
-fn place_houses(&mut self, map: &mut LocationMap) {
-        // Place houses along roads
+
+    // Update place_houses method
+    fn place_houses(&mut self, map: &mut LocationMap) {
         for y in 1..map.height-1 {
             for x in 1..map.width-1 {
-                // Check if this tile is adjacent to a road
                 if map.tiles[y][x].tile_type == LocationTileType::Ground {
                     let near_road = self.is_adjacent_to_road(map, x, y);
-                    if near_road && self.rng.gen_bool(0.3) { // 30% chance to place house
+                    if near_road && self.rng.gen_bool(0.3) {
                         map.tiles[y][x].tile_type = LocationTileType::HumanHouse;
                         
-                        // Maybe add a blacksmith or storage
-                        if self.rng.gen_bool(0.1) { // 10% chance for special building
+                        if self.rng.gen_bool(0.1) {
                             let feature_type = if self.rng.gen_bool(0.5) {
                                 FeatureType::Blacksmith
                             } else {
                                 FeatureType::Storage
                             };
-                            self.place_feature(map, (x, y), feature_type);
+                            self.place_feature(map, Position { x, y }, feature_type);
                         }
                     }
                 }
@@ -358,9 +359,11 @@ fn place_houses(&mut self, map: &mut LocationMap) {
         // Place gardens
         let num_gardens = self.rng.gen_range(3..=6);
         for _ in 0..num_gardens {
+            // Generate coordinates first
             let x = self.rng.gen_range(0..map.width);
             let y = self.rng.gen_range(0..map.height);
-            self.place_feature(map, (x, y), FeatureType::Garden);
+            // Then create Position and place feature
+            self.place_feature(map, Position { x, y }, FeatureType::Garden);
         }
 
         // Place shrines in quiet corners
@@ -368,20 +371,19 @@ fn place_houses(&mut self, map: &mut LocationMap) {
         for _ in 0..num_shrines {
             let x = self.rng.gen_range(0..map.width);
             let y = self.rng.gen_range(0..map.height);
-            if !self.is_near_feature(map, (x, y), 5) {
-                self.place_feature(map, (x, y), FeatureType::Temple);
+            if !self.is_near_feature(map, Position{x, y}, 5) {
+                self.place_feature(map, Position{x, y}, FeatureType::Temple);
             }
         }
     }
 
-    fn place_feature(&mut self, map: &mut LocationMap, pos: (usize, usize), feature_type: FeatureType) {
-        let (x, y) = pos;
-        if x < map.width && y < map.height {
+    fn place_feature(&mut self, map: &mut LocationMap, pos: Position, feature_type: FeatureType) {
+        if pos.x < map.width && pos.y < map.height {
             let feature = Feature {
                 name: self.get_feature_name(feature_type),
                 feature_type,
             };
-            map.tiles[y][x].feature = Some(feature.clone());
+            map.tiles[pos.y][pos.x].feature = Some(feature.clone());
             map.points_of_interest.push(PointOfInterest {
                 position: pos,
                 feature,
@@ -389,10 +391,11 @@ fn place_houses(&mut self, map: &mut LocationMap) {
         }
     }
 
-    fn is_near_feature(&self, map: &LocationMap, pos: (usize, usize), distance: i32) -> bool {
+       // Update is_near_feature to use Position
+    fn is_near_feature(&self, map: &LocationMap, pos: Position, distance: i32) -> bool {
         for poi in &map.points_of_interest {
-            let dx = (pos.0 as i32 - poi.position.0 as i32).abs();
-            let dy = (pos.1 as i32 - poi.position.1 as i32).abs();
+            let dx = (pos.x as i32 - poi.position.x as i32).abs();
+            let dy = (pos.y as i32 - poi.position.y as i32).abs();
             if dx <= distance && dy <= distance {
                 return true;
             }

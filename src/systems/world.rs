@@ -1,6 +1,6 @@
-use crate::world_generator::WorldGenerator;
-use crate::location::{Location, Species};
-
+use crate::generators::world_generator::WorldGenerator;
+use crate::systems::location::{Location, Species};
+use crate::systems::position::Position;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TerrainType {
     Water,
@@ -39,6 +39,8 @@ pub struct World {
     pub wraparound: bool,
     pub tiles: TileGrid,
 }
+pub const MAP_WIDTH: usize = 128;
+pub const MAP_HEIGHT: usize = 128;
 
 impl Tile {
     pub fn appearance(&self) -> char {
@@ -85,45 +87,73 @@ impl World {
         self.height
     }
 
-    pub fn get_tile(&self, x: usize, y: usize) -> &Tile {
-        &self.tiles[y][x]
+    pub fn get_tile(&self, position: &Position) -> &Tile {
+        &self.tiles[position.y][position.x]
     }
 
-    pub fn get_wrapped_coordinates(&self, x: i32, y: i32) -> (usize, usize) {
+    pub fn get_wrapped_coordinates(&self, position: &Position) -> Position {
         if self.wraparound {
-            let wx = x.rem_euclid(self.width() as i32) as usize;
-            let wy = y.rem_euclid(self.height() as i32) as usize;
-            (wx, wy)
+            Position {
+                x: ((position.x as i32).rem_euclid(self.width() as i32)) as usize,
+                y: ((position.y as i32).rem_euclid(self.height() as i32)) as usize,
+            }
         } else {
-            (x.clamp(0, self.width() as i32 - 1) as usize,
-             y.clamp(0, self.height() as i32 - 1) as usize)
+            Position {
+                x: position.x.clamp(0, self.width() - 1),
+                y: position.y.clamp(0, self.height() - 1),
+            }
         }
     }
 
-    pub fn update(&mut self, player_pos: (usize, usize)) {
+    pub fn update(&mut self, player_pos: &Position) {
         self.update_visibility(player_pos, FOG_RADIUS);
     }
 
-    fn update_visibility(&mut self, (px, py): (usize, usize), radius: i32) {
-        let (px, py) = (px as i32, py as i32);
+    fn update_visibility(&mut self, position: &Position, radius: i32) {
+        let (px, py) = (position.x as i32, position.y as i32);
+        
         for dy in -radius..=radius {
             for dx in -radius..=radius {
-                let dist = dx*dx + dy*dy;
-                if dist <= radius*radius {
-                    let (wx, wy) = self.get_wrapped_coordinates(px + dx, py + dy);
-                    self.tiles[wy][wx].seen = true;
+                // Only update tiles within the circular radius
+                if dx*dx + dy*dy <= radius*radius {
+                    let world_x = px + dx;
+                    let world_y = py + dy;
+                    
+                    let current_pos = Position {
+                        x: world_x as usize,
+                        y: world_y as usize,
+                    };
+                    
+                    // Get the wrapped position and mark it as seen
+                    if let Some(wrapped_pos) = self.get_valid_position(&current_pos) {
+                        self.tiles[wrapped_pos.y][wrapped_pos.x].seen = true;
+                    }
                 }
             }
         }
     }
 
+    // Helper function to get valid wrapped positions
+    fn get_valid_position(&self, pos: &Position) -> Option<Position> {
+        if self.wraparound {
+            Some(Position {
+                x: pos.x.rem_euclid(self.width),
+                y: pos.y.rem_euclid(self.height),
+            })
+        } else if pos.x < self.width && pos.y < self.height {
+            Some(*pos)
+        } else {
+            None
+        }
+    }
+
     pub fn find_nearest_species(
         &self,
-        start: (usize, usize),
+        start: &Position,
         target_species: Species,
-    ) -> Option<(usize, usize)> {
-        let (sx, sy) = (start.0 as i32, start.1 as i32);
-        let mut closest: Option<((usize, usize), i32)> = None;
+    ) -> Option<Position> {
+        let (sx, sy) = (start.x as i32, start.y as i32);
+        let mut closest: Option<(Position, i32)> = None;
 
         for (y, row) in self.tiles.iter().enumerate() {
             for (x, tile) in row.iter().enumerate() {
@@ -135,10 +165,10 @@ impl World {
 
                         match closest {
                             Some((_, best_dist)) if dist < best_dist => {
-                                closest = Some(((x, y), dist));
+                                closest = Some((Position { x, y }, dist));
                             }
                             None => {
-                                closest = Some(((x, y), dist));
+                                closest = Some((Position { x, y }, dist));
                             }
                             _ => {}
                         }
@@ -149,11 +179,7 @@ impl World {
 
         closest.map(|(pos, _)| pos)
     }
-
     pub fn get_interaction_prompt(&self, tile: &Tile) -> Option<String> {
         tile.location.as_ref().map(|loc| loc.generate_description())
     }
 }
-
-pub const MAP_WIDTH: usize = 128;
-pub const MAP_HEIGHT: usize = 128;

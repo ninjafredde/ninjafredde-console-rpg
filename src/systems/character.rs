@@ -1,5 +1,5 @@
-use crate::location::Species;
 use rand::Rng;
+use crate::systems::location::Species;
 
 pub struct Character {
     pub name: String,
