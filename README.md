@@ -17,3 +17,8 @@ Possible future features
 - town generator
 - cave generator
 - mine generator
+
+Screenshots:
+![Main View](docs/rpg-main-view.png)
+
+![World Map](docs/rpg-world-map.png
