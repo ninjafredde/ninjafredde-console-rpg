@@ -11,6 +11,7 @@ pub enum TerrainType {
     Snow,
     Jungle,
     Swamp,
+    Road,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -39,8 +40,7 @@ pub struct World {
     pub wraparound: bool,
     pub tiles: TileGrid,
 }
-pub const MAP_WIDTH: usize = 128;
-pub const MAP_HEIGHT: usize = 128;
+
 
 impl Tile {
     pub fn appearance(&self) -> char {
@@ -66,6 +66,8 @@ impl Tile {
             TerrainType::Snow => '*',
             TerrainType::Jungle => 'd',
             TerrainType::Swamp => 's',
+            TerrainType::Road => '#',
+            
         }
     }
 }
@@ -74,8 +76,8 @@ pub type TileGrid = Vec<Vec<Tile>>;
 const FOG_RADIUS: i32 = 4;
 
 impl World {
-    pub fn new(size: usize, seed: u32) -> Self {
-        let mut generator = WorldGenerator::new(seed, size);
+    pub fn new(seed: u32, width:usize, height:usize) -> Self {
+        let mut generator = WorldGenerator::new(seed, width, height);
         generator.generate()
     }
 

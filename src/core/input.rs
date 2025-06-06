@@ -8,6 +8,7 @@ pub fn handle_input(game: &mut Game) -> Result<(), std::io::Error> {
     match game.phase {
         GamePhase::PlayingWorld => handle_world_input(game),
         GamePhase::PlayingLocation(_) => handle_location_input(game),
+        GamePhase::Map => handle_map_input(game),
         _ => Ok(()),
     }
 }
@@ -25,9 +26,27 @@ pub fn handle_world_input(game: &mut Game) -> Result<(), std::io::Error> {
                         game.enter_location();
                     }
                 }
+                KeyCode::Char('m') => {
+                    game.phase = GamePhase::Map;
+                }
                 KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => {
                     handle_player_movement(key_event.code, &mut game.player.world_pos, &game.world);
                     game.update_interaction_prompt();
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+pub fn handle_map_input(game: &mut Game) -> Result<(), std::io::Error> {
+    match event::read()? {
+        Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+            match key_event.code {
+                KeyCode::Char('m') | KeyCode::Esc => {
+                    game.phase = GamePhase::PlayingWorld;
                 }
                 _ => {}
             }

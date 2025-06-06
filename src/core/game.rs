@@ -8,6 +8,7 @@ pub enum GamePhase {
     Menu,
     PlayingWorld,
     PlayingLocation(LocationMap),
+    Map,
     GameOver,
 }
 

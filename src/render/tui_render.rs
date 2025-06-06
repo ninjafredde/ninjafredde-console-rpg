@@ -30,12 +30,23 @@ pub fn render_game(
     game: &Game,
 ) -> Result<(), Box<dyn std::error::Error>> {
     terminal.draw(|f| {
+        // If we’re in Map mode, draw the full‐map and return early.
+        if let GamePhase::Map = &game.phase {
+            let area = f.size();
+            let full_map = render_full_map_widget(&game.world, area);
+            f.render_widget(full_map, area);
+            return;
+        }
+
         let chunks = create_layout(f.size());
         
         // Render different map based on game phase
         match &game.phase {
             GamePhase::PlayingWorld => {
                 render_map_widget(f, game, chunks[0]);
+                // Render common UI elements
+                render_stats_widget(f, game, chunks[1]);     // Stats
+                render_message_widget(f, game, chunks[2]);    // Message
             }
             GamePhase::PlayingLocation(location_map) => {
                 let location_view = render_location_map(
@@ -45,6 +56,10 @@ pub fn render_game(
                 );
                 f.render_widget(location_view, chunks[0]);
             }
+            GamePhase::Map => {
+                // render world map
+                // full console height
+            }
             GamePhase::Menu => {
                 // TODO: Render menu if needed
             }
@@ -53,9 +68,6 @@ pub fn render_game(
             }
         }
 
-        // Render common UI elements
-        render_stats_widget(f, game, chunks[1]);     // Stats
-        render_message_widget(f, game, chunks[2]);    // Message
         render_action_widget(f, game, chunks[3]);     // Actions
     })?;
     
@@ -265,6 +277,7 @@ fn get_terrain_style(tile: &Tile) -> Style {
         TerrainType::Snow => Color::White,
         TerrainType::Jungle => Color::Green,
         TerrainType::Swamp => Color::Green,
+        TerrainType::Road => Color::Gray,
     };
     Style::default().fg(color)
 }
@@ -390,4 +403,68 @@ pub fn shutdown_terminal(terminal: &mut GameTerminal) -> Result<(), Box<dyn std:
     terminal.show_cursor()?;
     
     Ok(())
+}
+
+/// Render the entire world, scaled to fit in `area`.
+/// We sample your `world.width × world.height` down into `area.height` rows
+/// and `area.width / 2` “columns” (because each tile is drawn as two characters: `"{symbol} "`).
+pub fn render_full_map_widget<'a>(
+    world: &crate::systems::world::World,
+    area: Rect,
+) -> Paragraph<'a> {
+    use ratatui::text::Text;
+    use ratatui::text::Line;
+    use ratatui::text::Span;
+
+    // How many “rows” of tiles we will draw
+    let rows = area.height as usize;
+    // How many “cols” of tiles: we print each tile as two characters ("X "),
+    // so we divide available width by 2.
+    let cols = (area.width as usize) / 2;
+
+    // If the terminal is too narrow (<2 columns), just return an empty box.
+    if rows == 0 || cols == 0 {
+        let empty = Paragraph::new(Text::from(vec![Line::from("")]))
+            .block(Block::default().borders(Borders::ALL).title("World Map"));
+        return empty;
+    }
+
+    let world_w = world.width as usize;
+    let world_h = world.height as usize;
+
+    let mut lines: Vec<Line> = Vec::with_capacity(rows);
+
+    for row in 0..rows {
+        // Which world‐row does this terminal row correspond to?
+        // Use integer scaling: world_y = row * world_h / rows
+        let world_y = (row * world_h) / rows;
+
+        let mut spans: Vec<Span> = Vec::with_capacity(cols);
+
+        for col in 0..cols {
+            // Which world‐col does this terminal column correspond to?
+            let world_x = (col * world_w) / cols;
+
+            // Grab wrapped coordinates (in case your world is toroidal)
+            let pos = crate::systems::position::Position {
+                x: world_x,
+                y: world_y,
+            };
+            let wrapped = world.get_wrapped_coordinates(&pos);
+            let tile = world.get_tile(&wrapped);
+
+            // Draw each tile as "<symbol><space>"
+            let symbol = tile.appearance();
+            let style = get_terrain_style(tile);
+
+            spans.push(Span::styled(format!("{} ", symbol), style));
+        }
+
+        lines.push(Line::from(spans));
+    }
+
+    let title = format!("World Map ({}×{})", world_w, world_h);
+
+    Paragraph::new(Text::from(lines))
+        .block(Block::default().borders(Borders::ALL).title(title))
 }

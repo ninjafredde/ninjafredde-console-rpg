@@ -2,7 +2,7 @@
 pub use crate::systems::position::Position;
 pub use crate::systems::player::Player;
 pub use crate::systems::character::Character;
-pub use crate::systems::world::{World, MAP_WIDTH, MAP_HEIGHT};
+pub use crate::systems::world::{World};
 
 // Core
 pub use crate::core::game::{Game, GamePhase};
