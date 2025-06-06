@@ -3,7 +3,7 @@ The aim is to build a fully modular architecture with an rpg game core, generato
 
 Current features:
 - procedural world generation using Perlin and Ridged Multi Fractal noise
-- move around using WASD
+- move around using arrow keys
 - map view with discovered tiles colored in as they are visited
 - places of interests which you can enter by pressing 'e'. Leave by pressing 'q'
 - world map view by pressing 'm'
