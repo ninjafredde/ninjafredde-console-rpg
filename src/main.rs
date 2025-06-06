@@ -13,7 +13,7 @@ use std::path::Path;
 use image::{RgbaImage, Rgba};
 
 use core::{game::Game, input::handle_input};
-use render::tui_render::{render_game, init_terminal, shutdown_terminal, GameTerminal};
+use render::tui_render::{TuiRenderer,init_terminal, shutdown_terminal, GameTerminal};
 
 pub const MAP_WIDTH: usize = 512;
 pub const MAP_HEIGHT: usize = 256;
@@ -28,7 +28,8 @@ fn main() {
     
 }
 fn run() -> Result<()> {
-    let mut terminal: GameTerminal = init_terminal()?;
+    let mut renderer = TuiRenderer::new()?;
+    renderer.init();
 
     let mut player = Player::create_random(MAP_WIDTH / 2, MAP_HEIGHT / 2);
     player.character = Character::create_random(); // or Character::create_human("Name".to_string());
@@ -60,7 +61,7 @@ fn run() -> Result<()> {
     // Game loop
     loop {
         // First render the current game state
-        render_game(&mut terminal, &game)?;
+        renderer.render(&game);
 
         // Then handle the current phase
         match game.phase {
@@ -80,7 +81,7 @@ fn run() -> Result<()> {
         }
     }
     // Cleanup and shutdown
-    shutdown_terminal(&mut terminal)?;  // Add ? operator here
+    renderer.shutdown();
     Ok(())  // Add explicit Ok return
 }
 

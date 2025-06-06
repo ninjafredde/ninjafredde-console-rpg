@@ -21,4 +21,4 @@ Possible future features
 Screenshots:
 ![Main View](docs/rpg-main-view.png)
 
-![World Map](docs/rpg-world-map.png
+![World Map](docs/rpg-world-map.png)

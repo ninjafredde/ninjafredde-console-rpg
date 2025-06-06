@@ -9,7 +9,7 @@ pub use crate::core::game::{Game, GamePhase};
 pub use crate::core::input::handle_input;
 
 // Render
-pub use crate::render::tui_render::{render_game, init_terminal, shutdown_terminal};
+pub use crate::render::tui_render::{TuiRenderer};
 
 // Generators
 pub use crate::generators::world_generator::WorldGenerator;

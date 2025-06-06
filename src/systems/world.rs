@@ -43,33 +43,7 @@ pub struct World {
 
 
 impl Tile {
-    pub fn appearance(&self) -> char {
-        if let Some(location) = &self.location {
-            return match location.species {
-                Species::Human => 'H',
-                Species::Orc => 'O',
-                Species::Elf => 'E',
-                Species::Cat => 'C',
-                Species::Rat => 'R',
-                Species::Bee => 'B',
-                Species::Bear => 'Ʊ',
-                Species::Ghost => 'G',
-            };
-        }
-
-        match self.terrain {
-            TerrainType::Water => 'w',
-            TerrainType::Plains => ',',
-            TerrainType::Forest => 'p',
-            TerrainType::Mountains => '^',
-            TerrainType::Desert => '.',
-            TerrainType::Snow => '*',
-            TerrainType::Jungle => 'd',
-            TerrainType::Swamp => 's',
-            TerrainType::Road => '#',
-            
-        }
-    }
+    
 }
 
 pub type TileGrid = Vec<Vec<Tile>>;
