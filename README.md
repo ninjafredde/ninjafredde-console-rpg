@@ -21,8 +21,22 @@ Possible future features
 Screenshots:
 ![Main View](docs/rpg-main-view.png)
 
-<<<<<<< HEAD
 ![World Map](docs/rpg-world-map.png)
-=======
-![World Map](docs/rpg-world-map.png)
->>>>>>> c30e4a7efc831da0b5c891f84023106c2264e2de
+
+## Building and Running
+
+To compile the project you need a recent version of Rust. The game relies on the
+`ratatui`, `crossterm`, `noise`, `rand` and `image` crates which are pulled in
+automatically by Cargo.
+
+Build the executable with:
+
+```bash
+cargo build
+```
+
+Launch the game with:
+
+```bash
+cargo run
+```
