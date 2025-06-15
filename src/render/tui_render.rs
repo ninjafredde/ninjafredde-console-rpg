@@ -5,6 +5,7 @@ use crate::generators::location_generator::{LocationMap, LocationTileType, Featu
 use crate::core::game::{Game, GamePhase};
 use crate::systems::player::Player;
 use crate::systems::position::Position;
+use crate::render::Renderer;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Rect, Layout, Constraint, Direction},
@@ -598,4 +599,18 @@ pub fn shutdown_terminal(terminal: &mut GameTerminal) -> Result<(), Box<dyn std:
     terminal.show_cursor()?;
     
     Ok(())
+}
+
+impl Renderer for TuiRenderer {
+    fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        TuiRenderer::init(self)
+    }
+
+    fn render(&mut self, game: &Game) -> Result<(), Box<dyn std::error::Error>> {
+        TuiRenderer::render(self, game)
+    }
+
+    fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        TuiRenderer::shutdown(self)
+    }
 }

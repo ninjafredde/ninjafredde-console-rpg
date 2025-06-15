@@ -13,7 +13,9 @@ use std::path::Path;
 use image::{RgbaImage, Rgba};
 
 use core::{game::Game, input::handle_input};
-use render::tui_render::{TuiRenderer,init_terminal, shutdown_terminal, GameTerminal};
+use render::{Renderer, tui_render::TuiRenderer};
+#[cfg(feature = "bevy-renderer")]
+use render::bevy_render::BevyRenderer;
 
 pub const MAP_WIDTH: usize = 512;
 pub const MAP_HEIGHT: usize = 256;
@@ -28,8 +30,12 @@ fn main() {
     
 }
 fn run() -> Result<()> {
-    let mut renderer = TuiRenderer::new()?;
-    renderer.init();
+    let mut renderer: Box<dyn Renderer> = if cfg!(feature = "bevy-renderer") {
+        Box::new(BevyRenderer::new()?)
+    } else {
+        Box::new(TuiRenderer::new()?)
+    };
+    renderer.init()?;
 
     let mut player = Player::create_random(MAP_WIDTH / 2, MAP_HEIGHT / 2);
     player.character = Character::create_random(); // or Character::create_human("Name".to_string());
@@ -81,7 +87,7 @@ fn run() -> Result<()> {
         }
     }
     // Cleanup and shutdown
-    renderer.shutdown();
+    renderer.shutdown()?;
     Ok(())  // Add explicit Ok return
 }
 
