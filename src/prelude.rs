@@ -9,7 +9,9 @@ pub use crate::core::game::{Game, GamePhase};
 pub use crate::core::input::handle_input;
 
 // Render
-pub use crate::render::tui_render::{TuiRenderer};
+pub use crate::render::{Renderer, tui_render::TuiRenderer};
+#[cfg(feature = "bevy-renderer")]
+pub use crate::render::bevy_render::BevyRenderer;
 
 // Generators
 pub use crate::generators::world_generator::WorldGenerator;
